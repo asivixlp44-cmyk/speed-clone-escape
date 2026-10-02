@@ -1,0 +1,5 @@
+{
+  "name": "sfs-shared",
+  "private": true,
+  "type": "module"
+}
