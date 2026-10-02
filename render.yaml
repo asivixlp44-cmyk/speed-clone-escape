@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: speed-clone-escape
+    runtime: node
+    region: singapore
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /health
+    autoDeploy: true
