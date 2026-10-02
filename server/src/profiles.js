@@ -23,7 +23,7 @@ export function defaultProfile(uid, name) {
         uid, name,
         steps: 0, wins: 0, totalWins: 0, level: 1, xp: 0, rebirths: 0, playtime: 0, best: 0,
         limits: {}, portals: {}, passes: {}, quest: 0,
-        boostUntil: 0, claimedPack: false, seenTutorial: false,
+        boostUntil: 0, claimedPack: false, seenTutorial: false, dailyDay: "", dailyStreak: 0,
         firstPlay: Date.now(),
     };
 }

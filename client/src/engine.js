@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 export const T = THREE;
 export const V3 = THREE.Vector3;
@@ -496,4 +497,37 @@ export function lerpAngle(a, b, k) {
     if (d > Math.PI) d -= Math.PI * 2;
     if (d < -Math.PI) d += Math.PI * 2;
     return a + d * k;
+}
+
+// ----- static batching -----
+// The world is built from thousands of unit boxes that never move again. Merge every one
+// that shares a material (and shadow flags) into a single mesh so the GPU draws a few
+// hundred batches instead of thousands of tiny calls. Anything animated later is a plain
+// Mesh with matrixAutoUpdate on, so it is left alone.
+export function mergeStatic() {
+    const groups = new Map();
+    for (const m of scene.children) {
+        if (!m.isMesh || m.matrixAutoUpdate || m.geometry !== UNIT || Array.isArray(m.material) || !m.visible) continue;
+        const key = m.material.uuid + '|' + (m.castShadow ? 1 : 0) + (m.receiveShadow ? 1 : 0);
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(m);
+    }
+    let before = 0, after = 0;
+    for (const list of groups.values()) {
+        before += list.length;
+        if (list.length < 2) { after += list.length; continue; }
+        // Chunks keep each merged buffer a sensible size
+        for (let i = 0; i < list.length; i += 400) {
+            const part = list.slice(i, i + 400);
+            const geos = part.map((m) => UNIT.clone().applyMatrix4(m.matrix));
+            const merged = new T.Mesh(mergeGeometries(geos), part[0].material);
+            merged.castShadow = part[0].castShadow; merged.receiveShadow = part[0].receiveShadow;
+            merged.matrixAutoUpdate = false;
+            for (const g of geos) g.dispose();
+            for (const m of part) scene.remove(m);
+            scene.add(merged);
+            after++;
+        }
+    }
+    return { before, after };
 }

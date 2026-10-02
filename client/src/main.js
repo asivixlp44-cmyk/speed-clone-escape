@@ -1,7 +1,7 @@
 import { Client } from '@colyseus/sdk';
 import {
     T, V3, $, canvas, scene, camera, sun, solids, kills, triggers, prompts, tickers,
-    billboard, buildRig, animRig, airPose, buildMonster, burst, confettiAt, floatText, updateEffects, lerpAngle,
+    billboard, buildRig, animRig, airPose, buildMonster, mergeStatic, burst, confettiAt, floatText, updateEffects, lerpAngle,
 } from './engine.js';
 import { S, actions, net } from './state.js';
 import { initAudio, startMusic, sfx, setVolume } from './audio.js';
@@ -13,7 +13,7 @@ import { updateStages, stageReset, bossZ } from './stages.js';
 import { buildWorld, SPAWN, beltTex, refreshWorld, renderBoards, treadLocked, updateScreens } from './world.js';
 import {
     updateHud, toast, levelUp, bigText, showStageTitle, buy, showRevive, hideRevive, closeModal, openModal,
-    refreshModal, promptEl, promptTxtEl, showWin, animateCounters, popGain, showTutorial, eatFlash, notice, popLoss, updateStageBar,
+    refreshModal, promptEl, promptTxtEl, showWin, animateCounters, popGain, showTutorial, eatFlash, notice, popLoss, updateStageBar, showClear,
 } from './ui.js';
 import { CFG, LOBBY, STAGES, KITS, SKINS, stageAt, clamp } from '../../shared/config.js';
 
@@ -494,8 +494,11 @@ actions.pad = (idx, double) => {
     if (double && !S.passes.DoubleWins) { buy('pass', 'DoubleWins'); return; }
     sendMove(true);
     net.send('pad', { s: idx });
+    // Remember how the run went for the Stage Clear card
+    lastClear = { stage: idx, alive: aliveClones(), owned: S.owned };
     teleportLobby();
 };
+let lastClear = null;
 actions.limit = (i) => {
     if (S.limits[i]) return;
     net.send('limit', { i });
@@ -644,7 +647,11 @@ async function connect(name) {
     room.onMessage('profile', (m) => {
         Object.assign(S, m);
         refreshWorld(); refreshModal();
-        if (firstProfile) { firstProfile = false; if (!S.seenTutorial) showTutorial(() => net.send('tutorial')); }
+        if (firstProfile) {
+            firstProfile = false;
+            if (!S.seenTutorial) showTutorial(() => net.send('tutorial'));
+            else if (S.daily && S.daily.ready) setTimeout(() => toast('🎁 Daily reward ready! Open FREE', '#ffd028'), 2500);
+        }
     });
     room.onMessage('toast', (m) => { if (/^You need /.test(m.text)) notice(m.text); else toast(m.text, m.color); });
     room.onMessage('levelUp', (m) => {
@@ -657,6 +664,8 @@ async function connect(name) {
     room.onMessage('gain', (m) => { popGain(m.n, m.t, m.gem); if (m.t) sfx('gain'); });
     room.onMessage('wins', (m) => {
         showWin(m.n);
+        if (lastClear && lastClear.stage === m.stage) showClear(STAGES[m.stage], lastClear.alive, lastClear.owned, m.n);
+        lastClear = null;
         floatText('+' + m.n + ' 🏆', '#ffd028', P.pos.clone().add(new V3(2.5, 5, 0)));
         sfx('cheer'); rumble(0.7, 500);
         confettiAt(P.pos.clone().add(new V3(0, 4, 0)));
@@ -683,9 +692,13 @@ async function connect(name) {
         sfx('buy');
     });
     room.onMessage('boards', renderBoards);
+    // The SDK retries dropped connections on its own; the server holds our place for 30 s
+    room.onDrop(() => { $('#reconnecting').hidden = false; });
+    room.onReconnect(() => { $('#reconnecting').hidden = true; toast('Reconnected!', '#7dff6b'); });
     room.onLeave((code, reason) => {
         console.warn('[net] left room', code, reason || '');
         net.room = null;
+        $('#reconnecting').hidden = true;
         if (code !== 1000) $('#offline').hidden = false;
     });
     return room;
@@ -1144,6 +1157,8 @@ async function boot() {
     try { await Promise.race([document.fonts.load('700 40px Fredoka'), new Promise((r) => setTimeout(r, 2500))]); } catch (e) { /* fallback font */ }
     BX.loadingStep('Building the lobby…');
     buildWorld();
+    const batched = mergeStatic();
+    if (import.meta.env.DEV) console.info("[world] batched", batched.before, "boxes into", batched.after, "meshes");
     loadBase().catch(() => {}); // warm up the Bloxity body model
     wirePortalSettings();
     wirePortalEvents();

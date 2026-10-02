@@ -3,7 +3,7 @@ import { GameState, PlayerState } from './schema.js';
 import { getProfile, markDirty, allProfiles, saveProfiles, adoptGuestProgress } from './profiles.js';
 import { verifyBloxityToken, BUX_MODE } from './bloxity.js';
 import {
-    CFG, LOBBY, STAGES, PORTALS, portalOpen, LIMITS, PRODUCTS, PASSES, QUESTS, FREE, KITS, SKINS,
+    CFG, LOBBY, STAGES, PORTALS, portalOpen, LIMITS, PRODUCTS, PASSES, QUESTS, FREE, DAILY, dailyStatus, dayKey, KITS, SKINS,
     xpFor, ownedClones, cloneLimit, stepsMult, treadmillAt, stageAt, fmt, comma, clamp,
 } from '../../shared/config.js';
 
@@ -41,6 +41,7 @@ export class CloneRoom extends Room {
         this.onMessage('portal', (client, m) => this.onPortal(client, m));
         this.onMessage('rebirth', (client) => this.onRebirth(client));
         this.onMessage('free', (client, m) => this.onFree(client, m));
+        this.onMessage('daily', (client) => this.onDaily(client));
         this.onMessage('buy', (client, m) => this.onBuy(client, m));
         this.onMessage('tutorial', (client) => this.onTutorial(client));
         this.onMessage('auth', (client, m) => this.onBloxityLogin(client, m));
@@ -87,6 +88,20 @@ export class CloneRoom extends Room {
         this.broadcastBoards(client);
     }
 
+    // A dropped connection (tunnel hiccup, phone switching networks) keeps the player in
+    // the world for 30 s so the client can reconnect without losing its place
+    onDrop(client) {
+        this.allowReconnection(client, 30);
+    }
+    onReconnect(client) {
+        const s = this.sessions.get(client.sessionId);
+        if (!s) return;
+        s.client = client;
+        client.send('hello', { now: Date.now(), bux: BUX_MODE, bloxity: s.profile.uid.startsWith('legion_') });
+        this.sendProfile(client.sessionId);
+        this.broadcastBoards(client);
+    }
+
     onLeave(client) {
         this.state.players.delete(client.sessionId);
         this.sessions.delete(client.sessionId);
@@ -112,7 +127,7 @@ export class CloneRoom extends Room {
         s.client.send('profile', {
             limits: p.limits, portals: p.portals, passes: p.passes, quest: p.quest, totalWins: p.totalWins, best: p.best,
             boostUntil: p.boostUntil, claimedPack: p.claimedPack, seenTutorial: p.seenTutorial,
-            firstPlay: p.firstPlay, freeClaimed: s.freeClaimed, joinedAt: s.joinedAt,
+            firstPlay: p.firstPlay, freeClaimed: s.freeClaimed, joinedAt: s.joinedAt, daily: dailyStatus(p, Date.now()),
         });
     }
     toast(s, text, color) { s.client.send('toast', { text, color }); }
@@ -301,6 +316,22 @@ export class CloneRoom extends Room {
         s.freeClaimed[i] = true;
         if (r.steps) this.addSteps(s, r.steps, false); else this.addWins(s, r.wins, false);
         this.toast(s, 'Claimed ' + (r.steps ? '+' + fmt(r.steps) + ' Steps' : '+' + r.wins + ' Wins') + '!', GREEN);
+        client.send('fx', { kind: 'confetti' });
+        this.changed(client.sessionId);
+    }
+
+    onDaily(client) {
+        const s = this.sessions.get(client.sessionId);
+        if (!s) return;
+        const p = s.profile, now = Date.now();
+        const st = dailyStatus(p, now);
+        if (!st.ready) return this.toast(s, 'Come back tomorrow for the next reward!', BLUE);
+        const r = DAILY[st.day];
+        p.dailyStreak = (p.dailyDay === dayKey(now - 86400000) ? p.dailyStreak : 0) + 1;
+        p.dailyDay = dayKey(now);
+        if (r.steps) this.addSteps(s, r.steps, false);
+        if (r.wins) this.addWins(s, r.wins, false);
+        this.toast(s, 'Day ' + (st.day + 1) + ' reward: ' + [r.steps ? '+' + fmt(r.steps) + ' Steps' : '', r.wins ? '+' + r.wins + ' Wins' : ''].filter(Boolean).join(' & ') + '!', GREEN);
         client.send('fx', { kind: 'confetti' });
         this.changed(client.sessionId);
     }

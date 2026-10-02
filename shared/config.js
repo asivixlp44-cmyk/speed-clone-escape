@@ -144,6 +144,19 @@ export const QUESTS = [
     { text: 'Get 1,000 Wins!', stat: 'totalWins', n: 1000, reward: { steps: 1000000 } },
 ];
 
+// Daily login streak: claim once per (UTC) day; missing a day starts over at Day 1
+export const DAILY = [
+    { steps: 500 }, { wins: 2 }, { steps: 2500 }, { wins: 5 }, { steps: 10000 }, { wins: 10 }, { steps: 50000, wins: 25 },
+];
+export const dayKey = (t) => new Date(t).toISOString().slice(0, 10);
+// { ready, day } where day is the 0-based index of the reward to claim (or just claimed)
+export function dailyStatus(p, now) {
+    const today = dayKey(now), yesterday = dayKey(now - 86400000);
+    if (p.dailyDay === today) return { ready: false, day: (p.dailyStreak - 1) % DAILY.length };
+    const streak = p.dailyDay === yesterday ? p.dailyStreak : 0;
+    return { ready: true, day: streak % DAILY.length };
+}
+
 // Session playtime rewards (minutes since joining)
 export const FREE = [
     { min: 2, steps: 500 }, { min: 5, wins: 2 }, { min: 10, steps: 5000 },

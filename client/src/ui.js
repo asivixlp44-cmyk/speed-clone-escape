@@ -5,7 +5,7 @@ import { sfx, getVolumes, setVolume } from './audio.js';
 import { QUALITIES, getQuality, setQuality } from './fx.js';
 import { ICONS, fillIcons } from './icons.js';
 import {
-    CFG, STAGES, PRODUCTS, PASSES, QUESTS, FREE, xpFor, fmt, comma, clock, clamp,
+    CFG, STAGES, PRODUCTS, PASSES, QUESTS, FREE, DAILY, xpFor, fmt, comma, clock, clamp,
 } from '../../shared/config.js';
 
 // Bux coin + amount (our own strings only; never user text)
@@ -56,7 +56,7 @@ export function updateHud(P, online, alive) {
     el.boost.hidden = boostLeft <= 0;
     if (boostLeft > 0) el.boost.textContent = '👟 x' + CFG.boostMult + ' STEPS BOOST ' + clock(boostLeft);
     const mins = (net.now() - S.joinedAt) / 60000;
-    el.freeBadge.hidden = !FREE.some((r, i) => mins >= r.min && !S.freeClaimed[i]);
+    el.freeBadge.hidden = !(S.daily && S.daily.ready) && !FREE.some((r, i) => mins >= r.min && !S.freeClaimed[i]);
     const q = QUESTS[S.quest];
     el.quest.hidden = !q;
     if (q) el.questTxt.textContent = q.text + ' (' + comma(Math.min(questValue(q.stat), q.n)) + '/' + comma(q.n) + ')';
@@ -119,6 +119,24 @@ export function bigText(text, color) {
     const d = $('#bigText');
     d.textContent = text; d.style.color = color || '#fff';
     d.classList.remove('show'); void d.offsetWidth; d.classList.add('show');
+}
+// Stage Clear results card
+let clearTimer;
+export function showClear(stage, alive, owned, wins) {
+    const c = $('#clearCard');
+    $('#ccStage').textContent = stage.name + ' · ' + stage.title;
+    $('#ccClones').textContent = alive + ' / ' + owned;
+    $('#ccWins').textContent = '+' + fmt(wins);
+    const k = owned === 0 ? 1 : alive / owned;
+    const stars = k >= 0.99 ? 3 : k >= 0.5 ? 2 : 1;
+    $('#ccStars').innerHTML = [0, 1, 2].map((i) => '<span class="' + (i < stars ? 'on' : '') + '" style="animation-delay:' + (0.35 + i * 0.18) + 's">★</span>').join('');
+    $('#ccNote').textContent = owned === 0 ? 'Level up to get clones - they take hits for you!'
+        : alive === owned ? 'Flawless! Every clone made it!'
+        : alive === 0 ? 'Close one! Unlock more clones on the stairs.' : 'Nice run!';
+    c.hidden = false;
+    c.classList.remove('show'); void c.offsetWidth; c.classList.add('show');
+    clearTimeout(clearTimer);
+    clearTimer = setTimeout(() => { c.hidden = true; }, 4200);
 }
 // Dark strip above the quest: "You need 14 more wins to unlock this!"
 let noticeTimer;
@@ -363,6 +381,29 @@ function renderFree() {
     const body = $('#modalBody');
     body.innerHTML = '';
     const mins = (net.now() - S.joinedAt) / 60000;
+    // Daily streak: seven days of rewards, today's is highlighted
+    const d = S.daily || { ready: false, day: 0 };
+    const week = document.createElement('div');
+    week.className = 'daily';
+    week.innerHTML = '<div class="sec">Daily Reward</div><div class="days"></div>';
+    const days = week.querySelector('.days');
+    DAILY.forEach((r, i) => {
+        const done = d.ready ? i < d.day : i <= d.day;
+        const today = d.ready && i === d.day;
+        const c = document.createElement('div');
+        c.className = 'day o1' + (done ? ' done' : '') + (today ? ' today' : '') + (i === DAILY.length - 1 ? ' big' : '');
+        c.innerHTML = '<b>Day ' + (i + 1) + '</b><span class="di">' + (r.wins && r.steps ? '🎁' : r.wins ? '🏆' : '👟') + '</span><small>' +
+            [r.steps ? fmt(r.steps) : '', r.wins ? r.wins + 'W' : ''].filter(Boolean).join(' + ') + '</small>' + (done ? '<i>✔</i>' : '');
+        days.appendChild(c);
+    });
+    const claim = document.createElement('button');
+    claim.className = 'btn o1 ' + (d.ready ? 'g-green' : 'g-grey');
+    claim.textContent = d.ready ? 'CLAIM DAY ' + (d.day + 1) : 'Come back tomorrow!';
+    claim.disabled = !d.ready;
+    claim.addEventListener('click', () => net.send('daily'));
+    week.appendChild(claim);
+    body.appendChild(week);
+    body.appendChild(sec('Playtime Rewards'));
     FREE.forEach((r, i) => {
         const claimed = !!S.freeClaimed[i];
         const ready = mins >= r.min;

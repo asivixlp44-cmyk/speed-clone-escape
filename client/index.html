@@ -330,6 +330,39 @@ body.touch #bottom { width: min(20rem, 46vw); }
 #stageTitle { top: calc(21vh + 5.5rem); }
 body.touch #tips { bottom: calc(env(safe-area-inset-bottom, 0px) + 26rem) !important; }
 @media (max-width: 600px) { #stageTitle { top: calc(env(safe-area-inset-top, 0px) + 9rem); } }
+
+/* ---------- Stage Clear card, reconnect banner, daily streak ---------- */
+#clearCard { position: absolute; left: 50%; top: 52%; transform: translate(-50%, -50%); width: min(24rem, 88vw); text-align: center; background: linear-gradient(#3a2f74ee, #1d1840ee); border: 4px solid #16121f; border-radius: 1.2rem; padding: 0.8rem 1rem 1rem; box-shadow: 0 0 0 3px #ffd028, 0 0.6rem 2rem rgba(0, 0, 0, 0.5); }
+#clearCard.show { animation: ccIn 0.5s cubic-bezier(0.2, 1.5, 0.4, 1), ccOut 0.5s 3.7s ease-in forwards; }
+@keyframes ccIn { from { opacity: 0; transform: translate(-50%, -40%) scale(0.6); } }
+@keyframes ccOut { to { opacity: 0; transform: translate(-50%, -60%) scale(0.9); } }
+.cc-head { font-size: 2.6rem; font-weight: 700; color: #ffd028; line-height: 1; }
+.cc-stage { font-size: 1.1rem; font-weight: 700; color: #cfc4f2; margin-top: 0.2rem; }
+.cc-stars { font-size: 3rem; line-height: 1.1; letter-spacing: 0.3rem; }
+.cc-stars span { color: #3a3460; display: inline-block; }
+.cc-stars span.on { color: #ffd028; animation: star 0.45s cubic-bezier(0.2, 1.8, 0.4, 1) both; }
+@keyframes star { from { transform: scale(0) rotate(-90deg); } }
+.cc-row { display: flex; justify-content: center; gap: 1.6rem; margin: 0.3rem 0; }
+.cc-row div { display: grid; }
+.cc-row small { font-size: 0.85rem; color: #cfc4f2; font-weight: 700; }
+.cc-row b { font-size: 1.9rem; }
+.cc-row b.gold { color: #ffd028; }
+.cc-note { font-size: 0.95rem; font-weight: 700; color: #7dff6b; }
+#reconnecting { position: absolute; left: 50%; top: calc(env(safe-area-inset-top, 0px) + 3.6rem); transform: translateX(-50%); display: flex; align-items: center; gap: 0.5rem; background: rgba(22, 18, 31, 0.8); border: 2px solid #ffb51c; border-radius: 2rem; padding: 0.3rem 1rem; font-weight: 700; color: #ffd028; }
+#reconnecting .spin { width: 1rem; height: 1rem; border: 3px solid #ffd028; border-top-color: transparent; border-radius: 50%; animation: spinr 0.8s linear infinite; }
+@keyframes spinr { to { transform: rotate(360deg); } }
+.daily { display: grid; gap: 0.5rem; }
+.daily .days { display: grid; grid-template-columns: repeat(7, 1fr); gap: 0.35rem; }
+.daily .day { position: relative; display: grid; justify-items: center; gap: 0.1rem; background: var(--panel-2); border: 3px solid var(--ink); border-radius: 0.7rem; padding: 0.3rem 0.1rem; }
+.daily .day b { font-size: 0.75rem; }
+.daily .day .di { font-size: 1.5rem; line-height: 1.1; }
+.daily .day small { font-size: 0.7rem; color: #ffd028; font-weight: 700; white-space: nowrap; }
+.daily .day.done { filter: grayscale(0.7) brightness(0.75); }
+.daily .day.done i { position: absolute; inset: 0; display: grid; place-items: center; font-size: 1.8rem; color: #7dff6b; font-style: normal; }
+.daily .day.today { background: linear-gradient(#7dff6b55, #22c73a55); box-shadow: 0 0 0 2px #7dff6b; }
+.daily .day.big { background-image: linear-gradient(#ffd02844, #ff8a1e44); }
+.daily > .btn { font-size: 1.2rem; padding: 0.45rem; }
+@media (max-width: 480px) { .daily .days { grid-template-columns: repeat(4, 1fr); } }
 </style>
 </head>
 <body>
@@ -381,6 +414,14 @@ body.touch #tips { bottom: calc(env(safe-area-inset-bottom, 0px) + 26rem) !impor
         <div id="stageBar" class="passive" hidden><span id="sbName" class="o1">Stage 1</span><div class="sbTrack"><div id="sbFill"></div><i id="sbBoss" hidden>☠</i></div><span id="sbPct" class="o1">0%</span></div>
         <div id="levelBanner" class="o"></div>
         <div id="bigText" class="o" aria-live="polite"></div>
+        <div id="clearCard" class="passive" hidden>
+            <div class="cc-head o">STAGE CLEAR!</div>
+            <div class="cc-stage o1" id="ccStage">Stage 1</div>
+            <div class="cc-stars o" id="ccStars"></div>
+            <div class="cc-row"><div><small class="o1">Clones saved</small><b class="o" id="ccClones">0 / 0</b></div><div><small class="o1">Wins</small><b class="o gold" id="ccWins">+1</b></div></div>
+            <div class="cc-note o1" id="ccNote"></div>
+        </div>
+        <div id="reconnecting" class="o1" hidden><span class="spin"></span>Reconnecting…</div>
         <div id="toasts" aria-live="polite"></div>
         <button id="promptBtn" hidden><kbd>E</kbd><span id="promptTxt"></span></button>
 
