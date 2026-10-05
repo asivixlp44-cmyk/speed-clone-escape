@@ -3,13 +3,13 @@
 # (adapted from the Combat Arena workflow)
 # ============================================================
 # Branch -> channel:
-#   dev           -> dev  channel  (https://speed-clone-escape.dev.play.bloxity.io)
-#   main / master -> prod channel  (https://speed-clone-escape.play.bloxity.io)
+#   dev           -> dev  channel  (https://clone-speed-escape.dev.play.bloxity.io)
+#   main / master -> prod channel  (https://clone-speed-escape.play.bloxity.io)
 #
 # Repo secrets required (Settings -> Secrets and variables -> Actions):
 #   LEGION_DEPLOY_TOKEN   the deploy token from hosting.bloxity.io
 #
-# The server image goes to ghcr.io/asivixlp44-cmyk/speed-clone-escape-server using the
+# The server image goes to ghcr.io/asivixlp44-cmyk/clone-speed-escape-server using the
 # workflow's own GITHUB_TOKEN (packages: write below), so no PAT is needed. An optional
 # GHCR_PUSH_TOKEN secret (classic PAT with write:packages) is used instead when present.
 #
@@ -17,7 +17,7 @@
 # id in GAME_ID below. Legion has no create-on-deploy; an unknown id is a 404.
 #
 # ONE-TIME after the first successful run: make the GHCR package public
-# (github.com/asivixlp44-cmyk -> Packages -> speed-clone-escape-server ->
+# (github.com/asivixlp44-cmyk -> Packages -> clone-speed-escape-server ->
 # Package settings -> Change visibility -> Public), otherwise Legion cannot pull it.
 #
 # Green deploy but "No capacity for this game right now"? That's the account's
@@ -38,10 +38,10 @@ permissions:
 env:
   # Must match the app id on hosting.bloxity.io. The client is built against it
   # and finds its server through the Bloxity matchmaker / <id>.host.bloxity.io.
-  GAME_ID: speed-clone-escape
+  GAME_ID: clone-speed-escape
   # GHCR account the server image is published under (the repo owner)
   IMAGE_OWNER: asivixlp44-cmyk
-  IMAGE_NAME: speed-clone-escape-server
+  IMAGE_NAME: clone-speed-escape-server
 
 jobs:
   deploy:

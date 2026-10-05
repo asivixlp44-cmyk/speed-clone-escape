@@ -6,7 +6,7 @@
 import { SKUS, PRODUCTS, PASSES } from '../../shared/config.js';
 
 // Catalogue slug on bloxity.io (Bux pricing, invites); defaults to the hosting id
-export const GAME_SLUG = import.meta.env.VITE_BLOXITY_GAME_SLUG || import.meta.env.VITE_BLOXITY_GAME_ID || 'speed-clone-escape';
+export const GAME_SLUG = import.meta.env.VITE_BLOXITY_GAME_SLUG || import.meta.env.VITE_BLOXITY_GAME_ID || 'clone-speed-escape';
 
 const sdk = () => (window.Legion && window.Legion.SDK) || null;
 const has = (path) => {

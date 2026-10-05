@@ -1,6 +1,6 @@
 # Speed Clone Escape game server (Colyseus).
 # Build from the REPO ROOT so shared/ is included:
-#   docker build -f server/Dockerfile -t speed-clone-escape-server .
+#   docker build -f server/Dockerfile -t clone-speed-escape-server .
 FROM node:22-alpine
 
 WORKDIR /app
