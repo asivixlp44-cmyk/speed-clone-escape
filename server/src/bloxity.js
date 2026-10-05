@@ -31,16 +31,6 @@ export async function verifyBloxityToken(token) {
     }
 }
 
-// Dedupe webhook deliveries (Bloxity retries on network errors)
-const seenTx = new Map();
-export function firstDelivery(txId) {
-    const now = Date.now();
-    for (const [k, t] of seenTx) if (now - t > 24 * 3600e3) seenTx.delete(k);
-    if (seenTx.has(txId)) return false;
-    seenTx.set(txId, now);
-    return true;
-}
-
 // ----- Stat reporting to Bloxity profiles ("Only in this game") -----
 const STAT_DEFS = [
     { key: 'steps', label: 'Steps', type: 'number', sortOrder: 1 },

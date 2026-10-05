@@ -600,8 +600,22 @@ function syncRemotes(dt, t) {
 // =====================================================================================
 // Networking
 // =====================================================================================
+// Hosted on Bloxity (VITE_BLOXITY_GAME_ID set at build time): the client is served from
+// <id>.play.bloxity.io and the server pods are found through the Bloxity matchmaker.
+const BLOXITY_GAME_ID = import.meta.env.VITE_BLOXITY_GAME_ID || '';
+// <id>.play.bloxity.io -> <id>.host.bloxity.io, <id>.dev.play.bloxity.io -> <id>.dev.host.bloxity.io
+const ON_BLOXITY_HOST = /\.play\.bloxity\.io$/.test(location.hostname);
+const DEV_CHANNEL = /\.dev\.play\.bloxity\.io$/.test(location.hostname);
 const SERVER_URL = import.meta.env.VITE_SERVER_URL
-    || (import.meta.env.DEV ? `${location.protocol}//${location.hostname}:2567` : location.origin);
+    || (ON_BLOXITY_HOST ? `https://${location.hostname.replace(/\.play\.bloxity\.io$/, '.host.bloxity.io')}`
+        : BLOXITY_GAME_ID ? `https://${BLOXITY_GAME_ID}.host.bloxity.io`
+        : import.meta.env.DEV ? `${location.protocol}//${location.hostname}:2567` : location.origin);
+async function serverEndpoint() {
+    if (!BLOXITY_GAME_ID) return SERVER_URL;
+    const r = await BX.resolveEndpoint(BLOXITY_GAME_ID, DEV_CHANNEL ? 'preview' : undefined);
+    if (r && r.cold) $('#loading').textContent = 'Waking up a server…';
+    return (r && r.endpoint) || SERVER_URL;
+}
 let lastMoveSent = 0, lastMoveKey = '';
 function sendMove(force) {
     const now = performance.now();
@@ -627,7 +641,7 @@ function playerUid() {
 }
 
 async function connect(name) {
-    const client = new Client(SERVER_URL);
+    const client = new Client(await serverEndpoint());
     const id = BX.identity();
     const room = await client.joinOrCreate('clone', {
         uid: playerUid(), name: name || id.name, token: id.token, av: packAvatar(BX.currentAvatar()),

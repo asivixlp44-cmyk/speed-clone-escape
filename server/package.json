@@ -9,6 +9,7 @@
   "dependencies": {
     "@colyseus/schema": "^5.0.34",
     "colyseus": "^0.18.8",
-    "express": "^5.2.1"
+    "express": "^5.2.1",
+    "mongodb": "^6.21.0"
   }
 }

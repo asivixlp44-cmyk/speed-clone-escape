@@ -1,6 +1,9 @@
 import { Room } from 'colyseus';
 import { GameState, PlayerState } from './schema.js';
-import { getProfile, markDirty, allProfiles, saveProfiles, adoptGuestProgress } from './profiles.js';
+import {
+    getProfile, markDirty, saveProfiles, adoptGuestProgress, loadProfile, releaseProfile,
+    topProfiles, claimGrants, queueGrant, USE_DB,
+} from './profiles.js';
 import { verifyBloxityToken, BUX_MODE } from './bloxity.js';
 import {
     CFG, LOBBY, STAGES, PORTALS, portalOpen, LIMITS, PRODUCTS, PASSES, QUESTS, FREE, DAILY, dailyStatus, dayKey, KITS, SKINS,
@@ -51,6 +54,8 @@ export class CloneRoom extends Room {
 
         this.setSimulationInterval((dt) => this.tick(dt), 100);
         this.clock.setInterval(() => this.broadcastBoards(), 10000);
+        // Bux purchases for players on this pod that were confirmed while they were elsewhere
+        if (USE_DB) this.clock.setInterval(() => this.applyQueuedGrants(), 5000);
     }
 
     // A Bloxity token is verified with the Bloxity API; anyone else joins as a guest
@@ -59,15 +64,16 @@ export class CloneRoom extends Room {
         return legion ? { legion } : { guest: true };
     }
 
-    onJoin(client, options, auth) {
+    async onJoin(client, options, auth) {
         options = options || {};
         const guest = guestUid(options.uid, client.sessionId);
         let uid = guest, name = cleanName(options.name);
         if (auth && auth.legion) {
             uid = 'legion_' + auth.legion.id;
             name = cleanName(auth.legion.name) || name;
-            adoptGuestProgress(uid, guest, name);
+            await adoptGuestProgress(uid, guest, name);
         }
+        await loadProfile(uid);
         const profile = getProfile(uid, name, randomName());
         const player = new PlayerState();
         player.name = profile.name;
@@ -86,6 +92,7 @@ export class CloneRoom extends Room {
         client.send('hello', { now: Date.now(), bux: BUX_MODE, bloxity: uid.startsWith('legion_') });
         this.sendProfile(client.sessionId);
         this.broadcastBoards(client);
+        if (USE_DB) this.applyQueuedGrants();
     }
 
     // A dropped connection (tunnel hiccup, phone switching networks) keeps the player in
@@ -103,12 +110,28 @@ export class CloneRoom extends Room {
     }
 
     onLeave(client) {
+        const s = this.sessions.get(client.sessionId);
         this.state.players.delete(client.sessionId);
         this.sessions.delete(client.sessionId);
         markDirty();
+        if (s && !isOnline(s.profile.uid)) releaseProfile(s.profile.uid);
     }
 
-    onDispose() { liveRooms.delete(this); saveProfiles(); }
+    // Colyseus awaits this on SIGTERM, which is how Legion stops a pod on every deploy
+    onDispose() { liveRooms.delete(this); markDirty(); return saveProfiles(); }
+
+    async applyQueuedGrants() {
+        const uids = [...this.sessions.values()].map((s) => s.profile.uid);
+        let grants = [];
+        try { grants = await claimGrants(uids); } catch (e) { return console.warn('[DB] grants:', e.message); }
+        for (const g of grants) {
+            const entry = [...this.sessions].find(([, s]) => s.profile.uid === g.uid);
+            if (entry) { this.grant({ ...entry[1], id: entry[0] }, g.kind, g.key); continue; }
+            // Left between the query and now: put it back for their next visit
+            queueGrant(g.uid, g.name, g.kind, g.key, g.tx).catch(() => {});
+        }
+        if (grants.length) saveProfiles();
+    }
 
     // ----- helpers -----
     syncPublic(id) {
@@ -203,9 +226,7 @@ export class CloneRoom extends Room {
     }
 
     broadcastBoards(target) {
-        const list = [];
-        for (const p of allProfiles()) list.push(p);
-        const top = (key) => list.slice().sort((a, b) => (b[key] || 0) - (a[key] || 0)).slice(0, 10).map((p) => ({ n: p.name, v: Math.floor(p[key] || 0) }));
+        const top = (key) => topProfiles(key).map((p) => ({ n: p.name, v: Math.floor(p[key] || 0) }));
         const msg = { steps: top('steps'), wins: top('totalWins'), playtime: top('playtime') };
         if (target) target.send('boards', msg); else this.broadcast('boards', msg);
     }
@@ -397,8 +418,12 @@ export class CloneRoom extends Room {
         const uid = 'legion_' + legion.id;
         if (s.profile.uid === uid) return;
         const name = cleanName(legion.name) || s.profile.name;
-        adoptGuestProgress(uid, s.profile.uid, name);
+        const guestProfile = s.profile;
+        await adoptGuestProgress(uid, guestProfile.uid, name);
+        await loadProfile(uid);
+        if (!this.sessions.has(client.sessionId)) return;
         s.profile = getProfile(uid, name, randomName());
+        if (!isOnline(guestProfile.uid)) releaseProfile(guestProfile.uid);
         s.player.name = s.profile.name;
         this.changed(client.sessionId);
         client.send('authed', { name: s.profile.name });
@@ -426,13 +451,20 @@ export class CloneRoom extends Room {
     }
 }
 
+function isOnline(uid) {
+    for (const room of liveRooms) for (const s of room.sessions.values()) if (s.profile.uid === uid) return true;
+    return false;
+}
+
 // Grants a Bux purchase confirmed by the Bloxity webhook, whether or not the player is online
-export function grantPurchase(uid, name, kind, key) {
+export async function grantPurchase(uid, name, kind, key, tx) {
     for (const room of liveRooms) {
         for (const [id, s] of room.sessions) {
             if (s.profile.uid === uid) return room.grant({ ...s, id }, kind, key);
         }
     }
+    // Not on this pod: the pod hosting them (or their next join) applies it
+    if (USE_DB) { await queueGrant(uid, name, kind, key, tx); return true; }
     const profile = getProfile(uid, name, randomName());
     const stub = { profile, client: { send() {} } };
     const proto = CloneRoom.prototype;
