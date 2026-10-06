@@ -6,7 +6,7 @@ import { defineRoom } from 'colyseus';
 import express from 'express';
 import { CloneRoom, grantPurchase } from './CloneRoom.js';
 import { WEBHOOK_SECRET, installStatReporter } from './bloxity.js';
-import { saveProfiles, firstDelivery } from './profiles.js';
+import { saveProfiles, firstDelivery, USE_DB } from './profiles.js';
 import { skuLookup } from '../../shared/config.js';
 
 // Serves the built client (client/dist) and the game room on the same port,
@@ -40,7 +40,8 @@ const app = config({
         clone: defineRoom(CloneRoom),
     },
     initializeExpress: (expressApp) => {
-        expressApp.get('/health', (req, res) => res.json({ ok: true }));
+        // db tells whether profiles go to MongoDB (MONGODB_URI) or the local file
+        expressApp.get('/health', (req, res) => res.json({ ok: true, db: USE_DB }));
         expressApp.post('/api/legion-webhook', express.json({ limit: '32kb' }), buxWebhook);
         if (fs.existsSync(CLIENT_DIST)) expressApp.use(express.static(CLIENT_DIST));
     },
