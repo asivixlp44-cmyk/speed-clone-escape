@@ -15,7 +15,7 @@ import {
     updateHud, toast, levelUp, bigText, showStageTitle, buy, showRevive, hideRevive, closeModal, openModal,
     refreshModal, promptEl, promptTxtEl, showWin, animateCounters, popGain, showTutorial, eatFlash, notice, popLoss, updateStageBar, showClear,
 } from './ui.js';
-import { CFG, LOBBY, STAGES, KITS, SKINS, stageAt, clamp } from '../../shared/config.js';
+import { CFG, LOBBY, STAGES, TREADMILLS, TREAD_GEO, KITS, SKINS, stageAt, clamp } from '../../shared/config.js';
 
 // =====================================================================================
 // Local player
@@ -505,6 +505,26 @@ actions.limit = (i) => {
 };
 actions.portal = (p) => net.send('portal', { stage: p.stage });
 actions.openPanel = (kind) => openModal(kind);
+
+// Auto Train: stand on the best unlocked AUTO RUN treadmill and keep earning while AFK.
+// Any movement input hands control back to the player.
+let autoTrain = false;
+function bestTreadmill() {
+    let best = -1;
+    TREADMILLS.forEach((d, i) => { if (!treadLocked(d) && (best < 0 || d.mult > TREADMILLS[best].mult)) best = i; });
+    return best;
+}
+function setAutoTrain(on, quiet) {
+    autoTrain = on;
+    $('#btnAuto').classList.toggle('on', on);
+    if (!on) { if (!quiet) toast('Auto Train OFF', '#c28cff'); return; }
+    if (P.dead) { autoTrain = false; $('#btnAuto').classList.remove('on'); return; }
+    const best = bestTreadmill();
+    setStage(-1);
+    teleport(new V3(TREAD_GEO.x0 + best * TREAD_GEO.step, TREAD_GEO.top + 0.5, TREAD_GEO.z), 0);
+    toast('Auto Train ON - ' + (TREADMILLS[best].mult > 1 ? 'x' + TREADMILLS[best].mult + ' ' : '') + 'treadmill', '#c28cff');
+}
+$('#btnAuto').addEventListener('click', () => { if (running) setAutoTrain(!autoTrain); });
 actions.buy = (kind, key) => buy(kind, key);
 
 // =====================================================================================
@@ -610,11 +630,33 @@ const SERVER_URL = import.meta.env.VITE_SERVER_URL
     || (ON_BLOXITY_HOST ? `https://${location.hostname.replace(/\.play\.bloxity\.io$/, '.host.bloxity.io')}`
         : BLOXITY_GAME_ID ? `https://${BLOXITY_GAME_ID}.host.bloxity.io`
         : import.meta.env.DEV ? `${location.protocol}//${location.hostname}:2567` : location.origin);
+let lastEndpoint = '';
 async function serverEndpoint() {
-    if (!BLOXITY_GAME_ID) return SERVER_URL;
-    const r = await BX.resolveEndpoint(BLOXITY_GAME_ID, DEV_CHANNEL ? 'preview' : undefined);
-    if (r && r.cold) $('#loading').textContent = 'Waking up a server…';
-    return (r && r.endpoint) || SERVER_URL;
+    const r = BLOXITY_GAME_ID ? await BX.resolveEndpoint(BLOXITY_GAME_ID, DEV_CHANNEL ? 'preview' : undefined) : null;
+    lastEndpoint = (r && r.endpoint) || SERVER_URL;
+    return lastEndpoint;
+}
+// The prod backend scales to zero when idle: the first player's join would hit a server
+// that is still booting. Poll /health every 2 s (up to 60 s) until it answers.
+async function waitForServer(url) {
+    if (await serverUp(url)) return true;
+    $('#loading').textContent = 'Waking up a server…';
+    BX.loadingStep('Waking up a server…');
+    const until = Date.now() + 60000;
+    while (Date.now() < until) {
+        await new Promise((res) => setTimeout(res, 2000));
+        if (await serverUp(url)) return true;
+    }
+    return false;
+}
+async function serverUp(url) {
+    try {
+        const ctl = new AbortController();
+        const t = setTimeout(() => ctl.abort(), 4000);
+        const r = await fetch(url.replace(/\/$/, '') + '/health', { signal: ctl.signal, cache: 'no-store' });
+        clearTimeout(t);
+        return r.ok;
+    } catch (e) { return false; }
 }
 let lastMoveSent = 0, lastMoveKey = '';
 function sendMove(force) {
@@ -640,8 +682,8 @@ function playerUid() {
     return uid;
 }
 
-async function connect(name) {
-    const client = new Client(await serverEndpoint());
+async function connect(name, endpoint) {
+    const client = new Client(endpoint);
     const id = BX.identity();
     const room = await client.joinOrCreate('clone', {
         uid: playerUid(), name: name || id.name, token: id.token, av: packAvatar(BX.currentAvatar()),
@@ -923,6 +965,13 @@ function update(dt) {
     if (keys.KeyD || keys.ArrowRight) r += 1;
     if (keys.KeyA || keys.ArrowLeft) r -= 1;
     f -= touchMove.y + pad.ly; r += touchMove.x + pad.lx;
+    // Dev-only QA autopilot: run forward, steering onto the lava bridge path or a fixed lane
+    if (import.meta.env.DEV && qaPilot.on && !P.dead) {
+        const s = STAGES[P.stage];
+        const tx = s && s.pathX && P.pos.z < s.cE ? s.pathX(P.pos.z + 6) : qaPilot.x;
+        f = 1; r = clamp((P.pos.x - tx) * 0.35, -1, 1) * (Math.cos(cam.yaw) < 0 ? 1 : -1);
+        if (qaPilot.jump && P.onGround) keys.Space = (P.pos.z % 7) < 1; else if (qaPilot.jump) keys.Space = false;
+    }
     cam.yaw -= pad.rx * 2.8 * dt;
     cam.pitch = clamp(cam.pitch + pad.ry * 1.8 * dt, -0.25, 1.35);
     tmpF.set(-Math.sin(cam.yaw), 0, -Math.cos(cam.yaw));
@@ -931,6 +980,7 @@ function update(dt) {
     if (mv.lengthSq() > 1) mv.normalize();
     if (P.dead) mv.set(0, 0, 0);
     P.moving = mv.lengthSq() > 0.01;
+    if (autoTrain && (P.moving || keys.Space || touchJump || pad.jump)) setAutoTrain(false);
 
     if (!P.dead) {
         if ((keys.Space || touchJump || pad.jump) && P.onGround) {
@@ -965,6 +1015,7 @@ function update(dt) {
             P.airTime = 0;
         } else P.airTime += dt;
         if (P.moving) P.facing = lerpAngle(P.facing, Math.atan2(mv.x, mv.z), 1 - Math.exp(-dt * 14));
+        else if (autoTrain) P.facing = lerpAngle(P.facing, 0, 1 - Math.exp(-dt * 8));
 
         if (P.shield > 0) P.shield -= dt;
         if (P.pos.y < CFG.voidY) { if (P.stage >= 0) lavaFall(); else { P.shield = 0; die(); } }
@@ -1080,7 +1131,19 @@ async function play() {
     try {
         await waitForLogin(1500);
         const saved = (storageGet('sce_name') || '').slice(0, 20);
-        const room = await connect(BX.identity().loggedIn ? '' : saved);
+        // A hosted server can still be starting: retry the join 4 more times (2, 4, 6, 8 s apart)
+        // Wait (once) for a scaled-to-zero server to boot, then join
+        const endpoint = await serverEndpoint();
+        await waitForServer(endpoint);
+        let room = null;
+        for (let attempt = 0; !room; attempt++) {
+            try { room = await connect(BX.identity().loggedIn ? '' : saved, endpoint); } catch (e) {
+                if (attempt >= 4) throw e;
+                console.warn('[join] attempt', attempt + 1, 'failed:', e && e.message);
+                $('#loading').textContent = 'Waking up a server…';
+                await new Promise((res) => setTimeout(res, 2000 * (attempt + 1)));
+            }
+        }
         const me = room.state.players && room.state.players.get(room.sessionId);
         S.name = me ? me.name : S.name;
     } catch (e) {
@@ -1089,6 +1152,10 @@ async function play() {
         $('#loading').hidden = true;
         err.hidden = false;
         err.textContent = 'Could not reach the game server. Check your connection and try again.';
+        const det = document.createElement('small');
+        det.className = 'err-detail';
+        det.textContent = (lastEndpoint ? lastEndpoint + ' · ' : '') + ((e && (e.message || e.code)) || String(e));
+        err.appendChild(det);
         retry.hidden = false;
         BX.loadingEnd();
         return;
@@ -1194,9 +1261,10 @@ async function boot() {
 boot();
 
 // Dev-only hooks for automated QA runs (stripped from production builds)
+var qaPilot = { on: false, x: 10, jump: false };
 if (import.meta.env.DEV) {
     window.__qa = {
-        P, S, STAGES, avatarStats, scene, cam,
+        P, S, STAGES, CFG, avatarStats, scene, cam, pilot: qaPilot, setAutoTrain,
         teleport: (x, y, z) => teleport(new V3(x, y, z), 0),
         monsters: () => activeMonsters().map((m) => ({ state: m.state, x: m.pos.x, z: m.pos.z })),
         crowd: () => (myCrowd ? myCrowd.count() : 0),
