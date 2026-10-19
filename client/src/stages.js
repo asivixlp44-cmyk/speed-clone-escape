@@ -102,9 +102,9 @@ function floorFor(i, s, theme) {
 function hangingLamp(x, z, color) {
     box(0.25, 5, 0.25, x, CH - 2.5, z, 0x16121f, { decor: true });
     const shade = new T.Mesh(new T.ConeGeometry(1.6, 1.4, 12, 1, true), mat(0x2b2546));
-    shade.position.set(x, CH - 5.4, z); scene.add(shade);
+    shade.position.set(x, CH - 5.4, z); shade.userData.static = true; scene.add(shade);
     const bulb = new T.Mesh(new T.SphereGeometry(0.6, 12, 8), mat(color, { neon: true }));
-    bulb.position.set(x, CH - 6, z); scene.add(bulb);
+    bulb.position.set(x, CH - 6, z); bulb.userData.static = true; scene.add(bulb);
     // Soft light cone on the floor
     const pool = new T.Mesh(new T.CircleGeometry(5, 32), new T.MeshBasicMaterial({ color, transparent: true, opacity: 0.12, depthWrite: false }));
     pool.rotation.x = -Math.PI / 2; pool.position.set(x, 0.04, z); scene.add(pool);
@@ -154,10 +154,10 @@ function buildShadow(i, s, rng, R) {
     // Ceiling lights that flicker; red alarm strips glow while monsters attack
     const flick = new T.MeshBasicMaterial({ color: 0xffffff });
     for (let z = s.zS + 10; z < s.zE; z += 20) for (const sx of [-1, 1]) {
-        const l = new T.Mesh(UNIT, flick); l.scale.set(0.6, 0.3, 8); l.position.set(sx * 8, CH - 0.4, z); l.rotation.y = sx * 0.5; scene.add(l);
+        const l = new T.Mesh(UNIT, flick); l.scale.set(0.6, 0.3, 8); l.position.set(sx * 8, CH - 0.4, z); l.rotation.y = sx * 0.5; l.userData.static = true; scene.add(l);
     }
     const alarm = new T.MeshBasicMaterial({ color: 0x400008 });
-    for (const sx of [-1, 1]) { const a = new T.Mesh(UNIT, alarm); a.scale.set(0.3, 0.6, s.len - 8); a.position.set(sx * (HALF - 0.1), 1.2, s.zS + s.len / 2); scene.add(a); }
+    for (const sx of [-1, 1]) { const a = new T.Mesh(UNIT, alarm); a.scale.set(0.3, 0.6, s.len - 8); a.position.set(sx * (HALF - 0.1), 1.2, s.zS + s.len / 2); a.userData.static = true; scene.add(a); }
     for (let z = s.zS + 24; z < s.cE - 40; z += 18) addGem(R.gems, i, (rng() * 2 - 1) * (HALF - 6), 0, z);
     R.update = (dt, t, ctx) => {
         const on = Math.sin(t * 23) + Math.sin(t * 7.3) > -1.6;

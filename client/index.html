@@ -363,6 +363,15 @@ body.touch #tips { bottom: calc(env(safe-area-inset-bottom, 0px) + 26rem) !impor
 .daily .day.big { background-image: linear-gradient(#ffd02844, #ff8a1e44); }
 .daily > .btn { font-size: 1.2rem; padding: 0.45rem; }
 @media (max-width: 480px) { .daily .days { grid-template-columns: repeat(4, 1fr); } }
+.err-detail { display: block; margin-top: 0.4rem; font-size: 0.8rem; color: #cfc4f2; word-break: break-all; }
+
+/* Auto Train button */
+.pill.auto { background: linear-gradient(#e2b8ff, #a65cff 55%, #7a2cf0); font-size: 1.45rem; }
+.pill.auto .ic { width: 2.2rem; height: 2.2rem; }
+.pill.auto.on { background: linear-gradient(#b8ffb0, #46ec50 55%, #22b03a); box-shadow: 0 0 0 3px #ffffff, 0 0 1.2rem rgba(125, 255, 107, 0.8); animation: autoPulse 1.2s ease-in-out infinite; }
+@keyframes autoPulse { 50% { transform: scale(1.05); } }
+#freeLb { font-variant-numeric: tabular-nums; }
+@media (max-width: 600px) { .pill.auto { font-size: 1.05rem; } .pill.auto .ic { width: 1.6rem; height: 1.6rem; } }
 </style>
 </head>
 <body>
@@ -391,7 +400,8 @@ body.touch #tips { bottom: calc(env(safe-area-inset-bottom, 0px) + 26rem) !impor
         <div id="leftCol">
             <div id="winsBox" class="bump-me passive"><i class="ic" data-icon="trophy"></i><b class="o" id="winsVal">0</b></div>
             <button class="pill" id="btnRebirth"><i class="ic" data-icon="rebirth"></i><span class="o1">Rebirths</span></button>
-            <button class="freeBtn" id="btnFree" aria-label="FREE rewards"><i class="ic" data-icon="gift"></i><span class="lb o">FREE</span><span class="badge" id="freeBadge" hidden>!</span></button>
+            <button class="pill auto" id="btnAuto" title="Run on your best treadmill while AFK"><i class="ic" data-icon="run"></i><span class="o1">Auto Train</span></button>
+            <button class="freeBtn" id="btnFree" aria-label="FREE rewards"><i class="ic" data-icon="gift"></i><span class="lb o" id="freeLb">FREE</span><span class="badge" id="freeBadge" hidden>!</span></button>
         </div>
 
         <div id="rightCol">

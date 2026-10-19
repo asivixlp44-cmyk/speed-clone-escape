@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { skinRig } from './batch.js';
 
 export const T = THREE;
 export const V3 = THREE.Vector3;
@@ -18,7 +19,8 @@ const FOG = 0x2a2440;
 scene.background = new T.Color(FOG);
 scene.fog = new T.Fog(FOG, 170, 460);
 
-export const camera = new T.PerspectiveCamera(70, 1, 0.3, 700);
+// nothing past the fog is drawn: it would only be fog-coloured anyway
+export const camera = new T.PerspectiveCamera(70, 1, 0.3, 480);
 function resize() {
     const w = innerWidth, h = innerHeight;
     renderer.setSize(w, h, false);
@@ -29,20 +31,20 @@ function resize() {
 addEventListener('resize', resize);
 resize();
 
-// Lit surfaces stay below 1.0 in the linear buffer so only HDR neon blooms;
-// toneMappingExposure (fx.js) brings the overall brightness back up.
-scene.add(new T.HemisphereLight(0xffffff, 0x6a5f80, 1.6));
+// Lit like Bloxity's top games: sky / ground fill, a little ambient and the sun, no tone mapping
+scene.add(new T.HemisphereLight(0xffffff, 0x6a5f80, 1.1));
 scene.add(new T.AmbientLight(0xffffff, 0.45));
-export const sun = new T.DirectionalLight(0xffffff, 1.2);
+export const sun = new T.DirectionalLight(0xfff3e0, 1.5);
 sun.castShadow = true;
 sun.shadow.mapSize.set(1024, 1024);
 Object.assign(sun.shadow.camera, { left: -45, right: 45, top: 45, bottom: -45, near: 1, far: 220 });
-sun.shadow.bias = -0.0015;
+sun.shadow.bias = -0.0008;
 scene.add(sun, sun.target);
 
 // ----- materials & textures -----
 export const UNIT = new T.BoxGeometry(1, 1, 1);
-export const NEON_BOOST = 1.3;
+// neon stays at its own colour (there is no bloom pass to feed)
+export const NEON_BOOST = 1;
 const matCache = new Map();
 export function mat(color, o) {
     o = o || {};
@@ -50,9 +52,9 @@ export function mat(color, o) {
     let m = matCache.get(key);
     if (!m) {
         m = o.neon ? new T.MeshBasicMaterial({ color }) : new T.MeshLambertMaterial({ color });
-        // Neon is HDR (brighter than 1) so the bloom pass picks it up
         if (o.neon) m.color.multiplyScalar(NEON_BOOST);
         if (o.opacity && o.opacity < 1) { m.transparent = true; m.opacity = o.opacity; m.depthWrite = false; }
+        m.userData.fold = true; // a shared colour: the world batcher may bake it into vertex colours
         matCache.set(key, m);
     }
     return m;
@@ -82,6 +84,7 @@ function studMat(color, rx, rz) {
     if (!m) {
         const t = studBase.clone(); t.needsUpdate = true; t.repeat.set(rx, rz);
         m = new T.MeshLambertMaterial({ color, map: t });
+        m.userData.fold = true; // a shared colour: the world batcher may bake it into vertex colours
         matCache.set(key, m);
     }
     return m;
@@ -421,6 +424,8 @@ const MON_BODY = new T.MeshLambertMaterial({ color: 0x0c0a12 });
 const MON_RIM = new T.MeshBasicMaterial({ color: new T.Color(0xff1e32).multiplyScalar(NEON_BOOST), side: T.BackSide });
 const MON_MOUTH = new T.MeshBasicMaterial({ color: 0x2a0410 });
 const MON_WHITE = new T.MeshBasicMaterial({ color: 0xffffff });
+// never recoloured: each monster is drawn as one skinned mesh (body and jaw as bones)
+for (const m of [MON_BODY, MON_MOUTH, MON_WHITE]) m.userData.fold = true;
 export function buildMonster() {
     const g = new T.Group();
     const body = new T.Group(); g.add(body);
@@ -455,6 +460,7 @@ export function buildMonster() {
         body.add(e);
     }
     g.userData = { body, jaw, rim };
+    skinRig(g);
     return g;
 }
 

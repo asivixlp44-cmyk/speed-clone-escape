@@ -57,6 +57,12 @@ export function updateHud(P, online, alive) {
     if (boostLeft > 0) el.boost.textContent = '👟 x' + CFG.boostMult + ' STEPS BOOST ' + clock(boostLeft);
     const mins = (net.now() - S.joinedAt) / 60000;
     el.freeBadge.hidden = !(S.daily && S.daily.ready) && !FREE.some((r, i) => mins >= r.min && !S.freeClaimed[i]);
+    // Countdown to the next playtime gift keeps players around for it
+    const next = FREE.find((r, i) => mins < r.min && !S.freeClaimed[i]);
+    // (the red badge still flags a ready daily reward)
+    const giftReady = FREE.some((r, i) => mins >= r.min && !S.freeClaimed[i]);
+    const lb = !giftReady && next ? clock((next.min - mins) * 60) : 'FREE';
+    if ($('#freeLb').textContent !== lb) $('#freeLb').textContent = lb;
     const q = QUESTS[S.quest];
     el.quest.hidden = !q;
     if (q) el.questTxt.textContent = q.text + ' (' + comma(Math.min(questValue(q.stat), q.n)) + '/' + comma(q.n) + ')';
