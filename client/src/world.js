@@ -9,6 +9,7 @@ import { THEMES, buildStageTheme } from './stages.js';
 import {
     CFG, LOBBY, STAGES, TREADMILLS, TREAD_GEO, PORTALS, portalOpen, LIMITS, PASSES, fmt, comma, hours, clamp, rngFrom, buxText,
 } from '../../shared/config.js';
+import { batchStatic, skinRig } from './batch.js';
 
 const HX = LOBBY.halfX, HZ = LOBBY.halfZ, WALLH = LOBBY.wallHeight;
 const W = CFG.courseWidth, CH = CFG.wallHeight;
@@ -54,7 +55,7 @@ function tree(x, z, s) {
     for (let i = 0; i < 3; i++) {
         const c = new T.Mesh(CONE, mat(i % 2 ? C.tree : C.treeDark));
         c.scale.set((4.2 - i * 1.1) * s, 3.4 * s, (4.2 - i * 1.1) * s);
-        c.position.set(x, (3 + i * 2.2) * s, z); c.castShadow = true; scene.add(c);
+        c.position.set(x, (3 + i * 2.2) * s, z); c.castShadow = true; c.userData.static = true; scene.add(c);
     }
     const star = new T.Mesh(new T.OctahedronGeometry(0.9 * s), mat(0xffd028, { neon: true }));
     star.position.set(x, 10 * s, z); scene.add(star);
@@ -64,7 +65,7 @@ function tree(x, z, s) {
         const a = i * 2.4, h = 2.4 + (i % 5) * 1.3;
         const r = (4.2 - (h - 2.4) * 0.5) * s * 0.85;
         const b = new T.Mesh(new T.SphereGeometry(0.32 * s, 8, 6), mat(cols[i % 4], { neon: true }));
-        b.position.set(x + Math.cos(a) * r * 0.75, h * s, z + Math.sin(a) * r * 0.75); scene.add(b);
+        b.position.set(x + Math.cos(a) * r * 0.75, h * s, z + Math.sin(a) * r * 0.75); b.userData.static = true; scene.add(b);
     }
     solids.push(aabb(x, 4 * s, z, 3 * s, 8 * s, 3 * s));
 }
@@ -82,11 +83,12 @@ function rocket(x, y, z, lean) {
     }
     const tip = new T.Mesh(new T.ConeGeometry(1, 2, 12), mat(0xffd028, { neon: true }));
     tip.position.y = 6 * 1.4 + 0.3; g.add(tip);
+    skinRig(g);
 }
 function lamp(x, y, z) {
     box(0.5, 4, 0.5, x, y - 2, z, 0x2b2546, { decor: true });
     const l = new T.Mesh(new T.ConeGeometry(1.2, 1.6, 8), mat(0xffe14a, { neon: true }));
-    l.position.set(x, y + 0.6, z); scene.add(l);
+    l.position.set(x, y + 0.6, z); l.userData.static = true; scene.add(l);
 }
 
 // =====================================================================================
@@ -557,7 +559,7 @@ function fairyLights() {
     const mats = cols.map((c) => new T.MeshBasicMaterial({ color: c }));
     const geo = new T.SphereGeometry(0.35, 8, 6);
     let k = 0;
-    const add = (x, y, z) => { const m = new T.Mesh(geo, mats[k++ % 4]); m.position.set(x, y, z); scene.add(m); };
+    const add = (x, y, z) => { const m = new T.Mesh(geo, mats[k++ % 4]); m.position.set(x, y, z); m.userData.static = true; scene.add(m); };
     for (let x = -HX + 2; x <= HX - 2; x += 3) {
         const sag = Math.abs(Math.sin((x / 15) * Math.PI)) * 1.6;
         if (Math.abs(x) > 26) add(x, 22.6 - sag, HZ - 1);
@@ -839,4 +841,6 @@ export function buildWorld() {
     buildLobby();
     buildCourse();
     refreshWorld();
+    // every box that never moves drawn together with the others that look the same
+    batchStatic(scene);
 }

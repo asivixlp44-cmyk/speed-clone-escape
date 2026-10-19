@@ -1077,7 +1077,7 @@ function update(dt) {
     const runAnim = (P.moving || P.autoRun) && P.onGround;
     P.animPhase += dt * (P.onGround ? (runAnim ? 14 : 4) : 0);
     if (P.onGround) animRig(rig, P.animPhase, runAnim ? 0.9 : 0); else airPose(rig);
-    if (localAvatar) localAvatar.update(dt, { moving: runAnim, air: !P.onGround, speed: CFG.walkSpeed, t });
+    if (localAvatar) localAvatar.update(dt, { moving: runAnim, air: !P.onGround, vy: P.vel.y, speed: CFG.walkSpeed, t });
     const stepN = Math.floor(P.animPhase / Math.PI);
     if (runAnim && !P.dead && stepN !== P.lastStep) sfx('step');
     P.lastStep = stepN;
@@ -1085,7 +1085,8 @@ function update(dt) {
     P.squashV += (1 - P.squash) * 180 * dt;
     P.squashV *= Math.exp(-12 * dt);
     P.squash = clamp(P.squash + P.squashV * dt, 0.7, 1.3);
-    rig.scale.set(1 / Math.sqrt(P.squash), P.squash, 1 / Math.sqrt(P.squash));
+    const sq = localAvatar ? 1 : P.squash; // the Bloxity avatar crouches on landing by itself
+    rig.scale.set(1 / Math.sqrt(sq), sq, 1 / Math.sqrt(sq));
     setSpeedLines(0, dt);
     rig.visible = !P.dead && (P.shield <= 0 || Math.floor(t * 12) % 2 === 0);
     if (myCrowd) myCrowd.update(dt, P.pos, P.facing, runAnim, t, !P.dead);
@@ -1100,7 +1101,7 @@ function update(dt) {
 // =====================================================================================
 // Boot
 // =====================================================================================
-let lastFrame = 0, loadingSignaled = false, fpsAcc = 0, fpsFrames = 0, showFps = false;
+let frameErrors = 0, lastFrame = 0, loadingSignaled = false, fpsAcc = 0, fpsFrames = 0, showFps = false;
 function frame(now) {
     const dt = Math.min(0.05, (now - (lastFrame || now)) / 1000);
     fpsAcc += (now - (lastFrame || now)) / 1000; fpsFrames++;
@@ -1111,12 +1112,15 @@ function frame(now) {
         loadingSignaled = true;
         BX.triggerAllSettings();
     }
-    pollGamepad();
-    padButtons();
-    if (running) update(dt);
-    else { beltTex.offset.y = (beltTex.offset.y + dt * 0.9) % 1; updateScreens(now / 1000); }
-    updateCamera(dt);
-    render();
+    // one bad frame (a broken avatar item, say) must never stop the game: log it and keep going
+    try {
+        pollGamepad();
+        padButtons();
+        if (running) update(dt);
+        else { beltTex.offset.y = (beltTex.offset.y + dt * 0.9) % 1; updateScreens(now / 1000); }
+        updateCamera(dt);
+        render();
+    } catch (e) { if (frameErrors++ < 5) console.error('frame error', e); }
     requestAnimationFrame(frame);
 }
 
